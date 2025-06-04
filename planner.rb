@@ -146,19 +146,21 @@ def notes_page pdf, heading_left, subheading_left = nil, heading_right = nil, su
     end
   end
 
-  # Horizontal lines
+  # Horizontal lines## Half hour lines
+    pdf.dash [1, 2], phase: 2
   (first_row..last_row).each do |row|
     pdf.grid([row, first_column], [row, last_column]).bounding_box do
       pdf.stroke_line pdf.bounds.bottom_left, pdf.bounds.bottom_right
     end
   end
+  pdf.undash
 
   # Checkboxes
-  ((first_row + 1)..last_row).each do |row|
-    pdf.grid(row, 0).bounding_box do
-      draw_checkbox pdf
-    end
-  end
+  # ((first_row + 1)..last_row).each do |row|
+  #   pdf.grid(row, 0).bounding_box do
+  #     draw_checkbox pdf
+  #   end
+  # end
 end
 
 def daily_tasks_page pdf, date, metrics_rows = 5
@@ -238,36 +240,63 @@ end
 def daily_calendar_page pdf, date
   begin_new_page pdf, :right
 
-  header_row_count = 2
+  header_row_count = 3
   body_row_count = HOUR_COUNT * 2
   first_column = 0
   last_column = COLUMN_COUNT - 1
-  fist_hour_row = header_row_count
+  first_hour_row = header_row_count
   last_hour_row = header_row_count + body_row_count - 1
 
   pdf.define_grid(columns: COLUMN_COUNT, rows: header_row_count + body_row_count, gutter: 0)
 
   # Header
+  # left_header = I18n.l(date, format: :medium)
+  # right_header = I18n.l(date, format: :weekday)
+  # left_subhed = date.strftime("#{I18n.t('quarter', number: quarter(date))} #{I18n.t('week')} %W #{I18n.t('day')} %j")
+  # # right_subhed = business_days_left_in_year(date)
+  # right_subhed = business_days_left_in_sprint(date)
+  # pdf.grid([0, first_column],[1, 1]).bounding_box do
+  #   pdf.text left_header, heading_format(align: :left)
+  # end
+  # pdf.grid([0, 2],[0, last_column]).bounding_box do
+  #   pdf.text right_header, heading_format(align: :right)
+  # end
+  # pdf.grid([1, first_column],[1, last_column]).bounding_box do
+  #   pdf.text left_subhed, subheading_format(align: :left)
+  # end
+  # pdf.grid([1, first_column],[1, last_column]).bounding_box do
+  #   pdf.text right_subhed, subheading_format(align: :right)
+  # end
+    # Header
   left_header = I18n.l(date, format: :medium)
   right_header = I18n.l(date, format: :weekday)
-  left_subhed = date.strftime("#{I18n.t('quarter', number: quarter(date))} #{I18n.t('week')} %W #{I18n.t('day')} %j")
-  # right_subhed = business_days_left_in_year(date)
-  right_subhed = business_days_left_in_sprint(date)
-  pdf.grid([0, first_column],[1, 1]).bounding_box do
+  pdf.grid([0, 0],[1, 2]).bounding_box do
     pdf.text left_header, heading_format(align: :left)
   end
-  pdf.grid([0, 2],[0, last_column]).bounding_box do
+  pdf.grid([0, 2],[1, 3]).bounding_box do
     pdf.text right_header, heading_format(align: :right)
   end
-  pdf.grid([1, first_column],[1, last_column]).bounding_box do
-    pdf.text left_subhed, subheading_format(align: :left)
-  end
-  pdf.grid([1, first_column],[1, last_column]).bounding_box do
-    pdf.text right_subhed, subheading_format(align: :right)
-  end
 
+  # Daily metrics
+  metrics_rows = 4
+  if metrics_rows > 0
+    pdf.grid([1, 0], [metrics_rows, 3]).bounding_box do
+      pdf.dash [1, 2]
+      pdf.stroke_bounds
+      pdf.undash
+
+      pdf.translate 6, -6 do
+        pdf.text I18n.t('daily_metrics'), color: MEDIUM_COLOR
+      end
+    end
+
+    pdf.grid([metrics_rows, 2], [metrics_rows, 3]).bounding_box do
+      draw_checkbox pdf, 6, I18n.t('shutdown_complete')
+    end
+  end
+  first_hour_row += metrics_rows
   (0...HOUR_COUNT).each do |hour|
-    row = hour * 2 + fist_hour_row
+    row = hour * 2 + first_hour_row - 2
     # Hour labels
     if hour_label = HOUR_LABELS[hour]
       pdf.grid(row, -1).bounding_box do
@@ -289,10 +318,10 @@ def daily_calendar_page pdf, date
   ## Top line
   pdf.stroke_color MEDIUM_COLOR
   overhang = 24
-  pdf.grid([fist_hour_row, first_column], [fist_hour_row, last_column]).bounding_box do
+  pdf.grid([first_hour_row, first_column], [first_hour_row, last_column]).bounding_box do
     pdf.stroke_line([pdf.bounds.top_left[0] - overhang, pdf.bounds.top_left[1]], pdf.bounds.top_right)
   end
-  (fist_hour_row..last_hour_row).step(2) do |row|
+  (first_hour_row..last_hour_row).step(2) do |row|
     ## Half hour lines
     pdf.dash [1, 2], phase: 2
     pdf.grid([row, first_column], [row, last_column]).bounding_box do
@@ -307,7 +336,7 @@ def daily_calendar_page pdf, date
 
   # Vertical lines
   (0..COLUMN_COUNT).each do |col|
-    pdf.grid([header_row_count, col], [last_hour_row, col]).bounding_box do
+    pdf.grid([header_row_count+4, col], [last_hour_row, col]).bounding_box do
       pdf.dash [1, 2], phase: 2
       pdf.stroke_line(pdf.bounds.top_left, pdf.bounds.bottom_left)
       pdf.undash
@@ -436,10 +465,17 @@ options[:weeks].times do |week|
   monday = sunday.next_day(1)
   next_sunday = sunday.next_day(7)
 
-  # Quarterly goals
-  if sunday.month != next_sunday.month && (next_sunday.month % 3) == Q1_START_MONTH
+  # Quarterly goals at January, June, September
+  quarter_months = [1, 6, 9]
+  if sunday.month != next_sunday.month && quarter_months.include?(next_sunday.month)
     first = Date.new(next_sunday.year, next_sunday.month, 1)
-    last = first.next_month(3).prev_day
+    # End of quarter is the day before the next quarter month, or Dec 31 for September
+    next_quarter_month = quarter_months.find { |m| m > next_sunday.month }
+    if next_quarter_month
+      last = Date.new(next_sunday.year, next_quarter_month, 1) - 1
+    else
+      last = Date.new(next_sunday.year, 12, 31)
+    end
     puts "Generating quarterly goals page for Q#{quarter(first)} #{date_range(first, last)}"
     quarter_ahead(pdf, first, last)
   end
@@ -452,7 +488,7 @@ options[:weeks].times do |week|
   # Daily pages
   (1..5).each do |i|
     day = sunday.next_day(i)
-    daily_tasks_page pdf, day
+    # daily_tasks_page pdf, day
     daily_calendar_page pdf, day
   end
 
